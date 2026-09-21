@@ -8,7 +8,7 @@ day's whole move happen inside that first 15 minutes with nothing after?
 """
 
 from market_prep.orb import compute_orb_and_breakout
-from tests.fixtures_orb_real_data import MSTR_BARS_RAW, COIN_BARS_RAW, AMD_BARS_RAW, to_dicts
+from tests.fixtures_orb_real_data import MSTR_BARS_RAW, COIN_BARS_RAW, AMD_BARS_RAW, NVDA_BARS_RAW, to_dicts
 
 OPEN_TS = "2026-09-21T13:30:00+00:00"  # 9:30 AM ET
 
@@ -37,6 +37,17 @@ def test_amd_broke_its_opening_range_and_kept_going():
     # AMD ran well beyond its breakout point through the close, not just a
     # one-bar poke back inside the range.
     assert result.max_follow_through > 5.0
+
+
+def test_nvda_broke_its_opening_range_and_kept_going():
+    """NVDA's premarket data was genuinely ambiguous (peaked early, faded
+    into the 9:00 cutoff -- see test_full_replay_additional_tickers.py),
+    but it broke its opening range almost immediately after 9:45 and ran
+    all day. Exactly the case the ORB+ICC execution layer exists for:
+    a real win the premarket forecast alone couldn't have been sure of."""
+    result = compute_orb_and_breakout(to_dicts(NVDA_BARS_RAW), OPEN_TS, "CALL")
+    assert result.breakout_confirmed is True
+    assert result.sustained is True
 
 
 def test_mstr_and_coin_would_have_produced_no_valid_entry():
