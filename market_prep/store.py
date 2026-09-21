@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from . import engine
+from . import engine, orb
 
 DEFAULT_LOG_PATH = Path(__file__).resolve().parent.parent / "market_prep_log.jsonl"
 
@@ -58,6 +58,43 @@ def record_checkpoint(date_str: str, checkpoint_name: str, outcomes: dict, log_p
     if not found:
         raise ValueError(f"no logged prediction for {date_str}")
     log_path.write_text("\n".join(updated) + "\n")
+
+
+def record_orb_checkpoint(
+    date_str: str,
+    ticker: str,
+    regular_session_bars: list[dict],
+    open_ts: str,
+    side: str,
+    log_path: Path = DEFAULT_LOG_PATH,
+) -> orb.OrbResult:
+    """Rules 68-71 as an actual post-open checkpoint instead of a report
+    reminder sentence. Computes whether the locked side ever got a valid
+    ORB breakout+close, and whether it was sustained, then logs it under
+    checkpoint name "ORB:<ticker>".
+
+    This is what would have caught MSTR/COIN on Sept 21, 2026: both were
+    logged CALL, but neither ever closed a bar above its own 9:30-9:45
+    opening-range high -- no valid entry ever formed, regardless of how
+    the direction call itself graded out.
+    """
+    result = orb.compute_orb_and_breakout(regular_session_bars, open_ts, side)
+    record_checkpoint(
+        date_str,
+        f"ORB:{ticker}",
+        {
+            "orb_high": result.orb_high,
+            "orb_low": result.orb_low,
+            "breakout_confirmed": result.breakout_confirmed,
+            "breakout_ts": result.breakout_ts,
+            "breakout_close": result.breakout_close,
+            "sustained": result.sustained,
+            "max_follow_through": result.max_follow_through,
+            "reasons": result.reasons,
+        },
+        log_path,
+    )
+    return result
 
 
 def load_log(log_path: Path = DEFAULT_LOG_PATH) -> list[dict]:

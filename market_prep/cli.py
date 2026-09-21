@@ -2,6 +2,8 @@
 
     python -m market_prep run --input snapshots.json --date 2026-09-22
     python -m market_prep checkpoint --date 2026-09-22 --name 9:45ET --input outcomes.json
+    python -m market_prep orb-check --date 2026-09-22 --ticker MSTR --side CALL \
+        --open-ts 2026-09-22T13:30:00+00:00 --bars mstr_bars.json
 
 `snapshots.json` is a JSON object: {"environment": {...}, "tickers": [ ...snapshot dicts... ]}
 See schema.md for the full snapshot field spec. This module does not fetch
@@ -47,6 +49,16 @@ def cmd_checkpoint(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_orb_check(args: argparse.Namespace) -> int:
+    bars = json.loads(Path(args.bars).read_text())
+    result = store.record_orb_checkpoint(args.date, args.ticker, bars, args.open_ts, args.side)
+    status = "SUSTAINED BREAKOUT" if result.sustained else ("BREAKOUT, NO FOLLOW-THROUGH" if result.breakout_confirmed else "NO VALID ENTRY")
+    print(f"{args.ticker}: {status}")
+    for r in result.reasons:
+        print(f"  - {r}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="market_prep")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -61,6 +73,14 @@ def main(argv: list[str] | None = None) -> int:
     cp_p.add_argument("--name", required=True, help="e.g. 9:45ET")
     cp_p.add_argument("--input", required=True, help="path to outcomes JSON")
     cp_p.set_defaults(func=cmd_checkpoint)
+
+    orb_p = sub.add_parser("orb-check", help="check whether a locked side got a valid, sustained ORB breakout")
+    orb_p.add_argument("--date", required=True)
+    orb_p.add_argument("--ticker", required=True)
+    orb_p.add_argument("--side", required=True, choices=["CALL", "PUT"])
+    orb_p.add_argument("--open-ts", required=True, help="9:30 AM ET regular-session open, ISO8601")
+    orb_p.add_argument("--bars", required=True, help="path to regular-session bars JSON")
+    orb_p.set_defaults(func=cmd_orb_check)
 
     args = parser.parse_args(argv)
     return args.func(args)
