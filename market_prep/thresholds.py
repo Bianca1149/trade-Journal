@@ -55,5 +55,14 @@ class Thresholds:
     # a CLEAR win for #1 vs NARROW.
     head_to_head_clear_gap: float = 1.0
 
+    # Elevated open-reversal risk (Sept-21 amendment): a raw premarket move,
+    # as a fraction of prior close, big enough to flag risk on its own even
+    # when the ticker's OWN ATR is already so large that ATR-normalized
+    # extension reads NORMAL. Added after HOOD (Sept 21, 2026): premarket
+    # move was +5.6% but only 0.94x its own (elevated, ~7.2) 14d ATR, so the
+    # ATR-only check missed it; HOOD round-tripped from the premarket high
+    # straight back down in the first 45 minutes after the open.
+    large_move_pct_floor: float = 0.04
+
 
 DEFAULT_THRESHOLDS = Thresholds()

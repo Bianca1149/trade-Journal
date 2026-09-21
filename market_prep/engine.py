@@ -253,15 +253,29 @@ def grade(stage2: Stage2Result, confidence: ConfidenceResult) -> str:
     return "C"
 
 
-def elevated_open_reversal_risk(snap: dict, stage1: Stage1Result) -> bool:
+def elevated_open_reversal_risk(snap: dict, stage1: Stage1Result, thresholds: Thresholds = DEFAULT_THRESHOLDS) -> bool:
     """Sept-21 amendment: large move, no fresh catalyst, already at the
-    premarket extreme -- flagged separately from the Directional Grade."""
+    premarket extreme -- flagged separately from the Directional Grade.
+
+    "Large" is ATR-elevated/extreme OR a raw-percent move past
+    large_move_pct_floor. The percent leg exists because a ticker with an
+    already-large own ATR (e.g. HOOD at ~7.2 after a volatile two weeks)
+    can put in a real, reversal-prone premarket move that still reads
+    NORMAL on ATR-normalized extension alone -- confirmed against the real
+    Sept 21, 2026 HOOD case (see tests/test_hood_reversal_case.py), where
+    the ATR-only version of this check missed it and HOOD round-tripped
+    from the premarket high in the first 45 minutes after the open.
+    """
     near_extreme = (
         stage1.range_position is not None
-        and (stage1.range_position >= 0.9 or stage1.range_position <= 0.1)
+        and (stage1.range_position >= thresholds.range_position_near_extreme or stage1.range_position <= 1 - thresholds.range_position_near_extreme)
     )
     no_fresh_catalyst = not (snap.get("fresh_catalyst") and snap.get("catalyst_price_confirmed"))
-    return stage1.extension in ("ELEVATED", "EXTREME") and no_fresh_catalyst and near_extreme
+    pct_move = 0.0
+    if snap.get("prior_close"):
+        pct_move = abs(snap["last_price"] - snap["prior_close"]) / snap["prior_close"]
+    large_move = stage1.extension in ("ELEVATED", "EXTREME") or pct_move >= thresholds.large_move_pct_floor
+    return large_move and no_fresh_catalyst and near_extreme
 
 
 def rank_key(snap: dict, stage1: Stage1Result, stage2: Stage2Result, confidence: ConfidenceResult) -> tuple[tuple, dict]:
@@ -347,7 +361,7 @@ def build_row(snap: dict, thresholds: Thresholds = DEFAULT_THRESHOLDS) -> Ticker
     confidence = classify_confidence(snap, thresholds)
     side = side_from_route(stage1.state, stage2.route)
     g = grade(stage2, confidence)
-    risk = elevated_open_reversal_risk(snap, stage1)
+    risk = elevated_open_reversal_risk(snap, stage1, thresholds)
     key, components = rank_key(snap, stage1, stage2, confidence)
     return TickerRow(
         ticker=snap["ticker"],
