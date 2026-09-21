@@ -30,7 +30,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 
-from . import metrics
+from . import metrics, orb
 from .thresholds import Thresholds, DEFAULT_THRESHOLDS
 
 GRADE_ORDER = ["A-", "A", "B-", "B", "B+", "C", "MIXED"]  # not used directly; see grade()
@@ -399,6 +399,37 @@ def ticker_of_the_day(rows: list[TickerRow]) -> Optional[TickerRow]:
     for row in rows:
         if row.side != "MIXED" and row.grade != "MIXED" and row.confidence.level != "INSUFFICIENT":
             return row
+    return None
+
+
+def pick_executable_trade(
+    ranked_rows: list[TickerRow],
+    side: str,
+    open_ts: str,
+    regular_session_bars_by_ticker: dict[str, list[dict]],
+) -> Optional[dict]:
+    """THE actual fix: ranking (pre-open) and ORB execution (post-open)
+    used to be two separate reports that were never reconciled, so a
+    top-ranked pick with no real breakout could still be "the trade" by
+    default. This walks the ranked CALL/PUT list in order and returns the
+    first one that actually got a confirmed, sustained ORB breakout --
+    skipping any that didn't, no matter how high they ranked before the
+    open.
+
+    Run this once bars are available past 9:45 ET. On Sept 21, 2026, fed
+    the real rank order [HOOD, COIN, MSTR, AMD, ...] for CALL, this skips
+    HOOD/COIN/MSTR (no confirmed breakout) and returns AMD -- the actual
+    trade that should have been taken, automatically, instead of the
+    premarket top pick that never confirmed.
+    """
+    candidates = [r for r in ranked_rows if r.side == side]
+    for rank, row in enumerate(candidates, start=1):
+        bars = regular_session_bars_by_ticker.get(row.ticker)
+        if not bars:
+            continue
+        result = orb.compute_orb_and_breakout(bars, open_ts, side)
+        if result.breakout_confirmed and result.sustained:
+            return {"ticker": row.ticker, "premarket_rank": rank, "side": side, "orb": result}
     return None
 
 
