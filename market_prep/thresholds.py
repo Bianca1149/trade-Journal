@@ -64,5 +64,14 @@ class Thresholds:
     # straight back down in the first 45 minutes after the open.
     large_move_pct_floor: float = 0.04
 
+    # How hard elevated_open_reversal_risk drags a ticker down in the
+    # ranking (factor 2, quality). Confirmed against real Sept 21, 2026
+    # data: HOOD/MSTR/COIN were all flagged risky pre-9AM (large move,
+    # parked at the premarket extreme, no catalyst) and all three failed;
+    # AMD, not flagged (already off its premarket high by 9AM), worked.
+    # Bigger than extension_penalty (-1.0) because it's now the
+    # better-evidenced signal.
+    elevated_open_reversal_risk_penalty: float = -1.5
+
 
 DEFAULT_THRESHOLDS = Thresholds()

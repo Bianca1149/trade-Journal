@@ -278,7 +278,14 @@ def elevated_open_reversal_risk(snap: dict, stage1: Stage1Result, thresholds: Th
     return large_move and no_fresh_catalyst and near_extreme
 
 
-def rank_key(snap: dict, stage1: Stage1Result, stage2: Stage2Result, confidence: ConfidenceResult) -> tuple[tuple, dict]:
+def rank_key(
+    snap: dict,
+    stage1: Stage1Result,
+    stage2: Stage2Result,
+    confidence: ConfidenceResult,
+    elevated_risk: bool,
+    thresholds: Thresholds = DEFAULT_THRESHOLDS,
+) -> tuple[tuple, dict]:
     """Rule 55 priority order, plus the three Sept-21 same-day amendments.
 
     Returns a tuple sortable descending (higher = better) plus a dict of the
@@ -327,7 +334,14 @@ def rank_key(snap: dict, stage1: Stage1Result, stage2: Stage2Result, confidence:
     if stage1.extension == "EXTREME" and not catalyst:
         extension_penalty = -1.0
     breadth_bonus = 0.5 if (breadth and stage1.extension == "NORMAL") else 0.0
-    quality += extension_penalty + breadth_bonus
+
+    # THE fix: this flag was being computed and reported but never actually
+    # affected the ranking, so a ticker could be marked risky and still
+    # rank #1. Confirmed predictive on real Sept 21 data (see
+    # tests/test_premarket_ranking_real_case.py) -- apply it here.
+    risk_penalty = thresholds.elevated_open_reversal_risk_penalty if elevated_risk else 0.0
+
+    quality += extension_penalty + breadth_bonus + risk_penalty
 
     key = (
         clarity,
@@ -351,6 +365,7 @@ def rank_key(snap: dict, stage1: Stage1Result, stage2: Stage2Result, confidence:
         "confidence_rank": confidence_rank,
         "extension_penalty": extension_penalty,
         "breadth_bonus": breadth_bonus,
+        "risk_penalty": risk_penalty,
     }
     return key, components
 
@@ -362,7 +377,7 @@ def build_row(snap: dict, thresholds: Thresholds = DEFAULT_THRESHOLDS) -> Ticker
     side = side_from_route(stage1.state, stage2.route)
     g = grade(stage2, confidence)
     risk = elevated_open_reversal_risk(snap, stage1, thresholds)
-    key, components = rank_key(snap, stage1, stage2, confidence)
+    key, components = rank_key(snap, stage1, stage2, confidence, risk, thresholds)
     return TickerRow(
         ticker=snap["ticker"],
         stage1=stage1,
