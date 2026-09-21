@@ -146,3 +146,16 @@ def test_ticker_of_the_day_none_when_all_mixed():
 def test_rank_all_requires_at_least_one_snapshot():
     with pytest.raises(ValueError):
         engine.rank_all([])
+
+
+def test_index_confirmation_now_actually_affects_ranking():
+    """Was a hardcoded 0 (factor 8, rule 46) -- never wired to any input,
+    so SPY/QQQ confirming the broad market never moved the ranking even
+    when it was the single strongest signal of the day (Sept 21, 2026:
+    SPY and QQQ both broke out and ran, while several mega-caps that
+    matched that direction sat in MIXED/Avoid). Two tickers identical
+    except for index_confirmation must now rank differently."""
+    confirmed = engine.build_row(base_snapshot(ticker="CONFIRMED", index_confirmation=True))
+    unconfirmed = engine.build_row(base_snapshot(ticker="UNCONFIRMED", index_confirmation=False))
+    assert confirmed.rank_components != unconfirmed.rank_components
+    assert confirmed.rank_key > unconfirmed.rank_key

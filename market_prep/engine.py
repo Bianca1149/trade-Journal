@@ -140,25 +140,29 @@ def classify_stage2(snap: dict, stage1: Stage1Result, thresholds: Thresholds = D
         )
     )
     low_giveback = stage1.retention is not None and stage1.retention >= thresholds.retention_strong
-    progressing = metrics.latest_window_progressing(bars, direction_up)
+    trend = metrics.latest_window_trend(bars, direction_up, flat_tolerance_fraction=thresholds.flat_tolerance_fraction)
     catalyst_or_cluster = bool(
         (snap.get("fresh_catalyst") and snap.get("catalyst_price_confirmed"))
         or snap.get("cluster_aligned")
         or snap.get("driver_aligned")
     )
     participation = metrics.participation_trend(bars, thresholds)
-    participation_supportive = participation in ("accelerating", "stable") and progressing is not False
+    participation_supportive = participation in ("accelerating", "stable") and trend != "reversing"
 
     continuation_checks = {
         "holding_near_extreme": near_extreme,
         "low_giveback": low_giveback,
-        "latest_window_progressing": bool(progressing),
+        # A pause isn't a reversal -- "flat" (consolidating, not rolling
+        # over) counts toward continuation same as "progressing". Real
+        # AMD case, Sept 21 2026: it held flat pre-open, not reversing,
+        # and it was one of the day's best trades.
+        "latest_window_progressing": trend in ("progressing", "flat"),
         "catalyst_or_cluster_or_driver": catalyst_or_cluster,
         "participation_supportive": participation_supportive,
     }
 
     # --- Fade checks (rule 27, trimmed to 5) ---
-    late_stall_or_reversal = progressing is False
+    late_stall_or_reversal = trend == "reversing"
     meaningful_giveback = stage1.retention is not None and stage1.retention <= thresholds.retention_weak
     weak_range_position = rpos is not None and not near_extreme
     lost_vwap_acceptance = (
@@ -320,8 +324,18 @@ def rank_key(
     participation = metrics.participation_trend(snap.get("premarket_bars") or [], DEFAULT_THRESHOLDS)  # 7
     participation_score = {"accelerating": 1, "stable": 0, "decelerating": -1, "unavailable": 0}[participation]
 
-    cross_market_extra = 0  # breadth already folded into #4; avoid double counting -- rule 47/32.
-    # No separate signal beyond breadth in this input schema; placeholder for future data (factor 8).
+    # 8. Rule 46: does the broad market itself (SPY/QQQ premarket state)
+    # agree with this ticker's own direction? This was a hardcoded 0 --
+    # never wired to any input, so the single biggest real signal on
+    # Sept 21, 2026 (SPY and QQQ both broke out and ran the whole day)
+    # never touched the ranking at all, while individually loud movers
+    # like HOOD/MSTR/COIN/SOFI out-ranked steadier names like
+    # META/NVDA/MSFT/AAPL that the broad market was actually confirming.
+    # `index_confirmation` is set by whoever assembles the snapshot, from
+    # SPY/QQQ's own premarket state matching this ticker's state -- never
+    # computed here, to avoid the ticker "confirming itself" when it is
+    # SPY or QQQ.
+    cross_market_extra = 1 if snap.get("index_confirmation") else 0
 
     confidence_rank = {"HIGH": 2, "REDUCED": 1, "INSUFFICIENT": 0}[confidence.level]  # 9 tiebreaker
 
@@ -362,6 +376,7 @@ def rank_key(
         "catalyst": catalyst,
         "rs_rw_aligned": rs_rw_aligned,
         "participation_score": participation_score,
+        "cross_market_extra": cross_market_extra,
         "confidence_rank": confidence_rank,
         "extension_penalty": extension_penalty,
         "breadth_bonus": breadth_bonus,

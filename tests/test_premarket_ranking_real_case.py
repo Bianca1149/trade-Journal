@@ -101,18 +101,17 @@ def test_mstr_excluded_from_call_side_entirely_on_premarket_data_alone():
     assert row.side != "CALL"
 
 
-def test_amd_needs_separate_calibration_not_covered_by_this_fix():
-    """Honest gap, not swept under the rug: AMD's premarket action (pulled
-    back from its high, flattish in the last few bars) reads as "not
-    clearly progressing" under the current 5-bar continuation check, so it
-    classifies MIXED here even though the real report -- with more context
-    than this synthetic snapshot has -- correctly called it a CALL. The
-    risk-penalty fix doesn't touch this; Stage 2's continuation threshold
-    for a healthy pause-then-continue pattern is a separate, open
-    calibration problem."""
+def test_amd_correctly_classifies_call_after_flat_vs_reversing_fix():
+    """Was an open gap (a genuine ~0.2% pullback in AMD's last 5 premarket
+    bars read as "reversing" under the old 0.05% tolerance, so AMD
+    classified MIXED here even though it was one of the day's best
+    trades). Fixed by treating a shallow pause as "flat" rather than
+    "reversing" (metrics.latest_window_trend, Thresholds.flat_tolerance_fraction).
+    Using only premarket data, AMD now correctly classifies CALL."""
     row = engine.build_row(amd_snapshot())
-    assert row.side == "MIXED"
-    assert row.stage2.continuation_checks["latest_window_progressing"] is False
+    assert row.side == "CALL"
+    assert row.stage2.route == "CONTINUATION"
+    assert row.stage2.continuation_checks["latest_window_progressing"] is True
 
 
 def test_flagged_call_picks_carry_the_penalty_in_their_quality_score():

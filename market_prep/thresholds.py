@@ -73,5 +73,13 @@ class Thresholds:
     # better-evidenced signal.
     elevated_open_reversal_risk_penalty: float = -1.5
 
+    # How much pullback in the last 5-bar window still counts as "flat"
+    # (consolidating) rather than "reversing", as a fraction of price.
+    # Confirmed against real AMD data, Sept 21 2026: a genuine ~0.2%
+    # pullback over its last 25 premarket minutes was a healthy pause
+    # before a big move, not a reversal -- 0.05% was too tight to absorb
+    # ordinary noise on a $580 stock and called it a fade.
+    flat_tolerance_fraction: float = 0.003
+
 
 DEFAULT_THRESHOLDS = Thresholds()

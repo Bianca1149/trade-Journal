@@ -137,11 +137,29 @@ def participation_trend(bars: list[dict], thresholds) -> str:
     return "stable"
 
 
-def latest_window_progressing(bars: list[dict], direction_up: bool, window: int = 5) -> Optional[bool]:
-    """Whether the most recent bars are still moving in the Stage-1 direction (rule 21/23)."""
+def latest_window_trend(
+    bars: list[dict], direction_up: bool, window: int = 5, flat_tolerance_fraction: float = 0.0005
+) -> Optional[str]:
+    """"progressing" / "flat" / "reversing" over the most recent bars (rule 21/23).
+
+    A pause is not a reversal. The old version returned a plain bool from
+    the sign of the net move alone, which meant a stock quietly holding
+    flat before continuing (AMD, Sept 21, 2026 -- see
+    tests/test_premarket_ranking_real_case.py) scored identically to one
+    actually rolling over. "flat" now counts toward continuation, not
+    against it; only a real move against the Stage-1 direction, past
+    flat_tolerance_fraction, counts as reversing.
+    """
     if len(bars) < window + 1:
         return None
     recent = bars[-window:]
     closes = [b["close"] for b in recent]
-    net_move = closes[-1] - closes[0]
-    return (net_move > 0) if direction_up else (net_move < 0)
+    if not closes[0]:
+        return None
+    pct_move = (closes[-1] - closes[0]) / closes[0]
+    signed = pct_move if direction_up else -pct_move
+    if signed > flat_tolerance_fraction:
+        return "progressing"
+    if signed < -flat_tolerance_fraction:
+        return "reversing"
+    return "flat"

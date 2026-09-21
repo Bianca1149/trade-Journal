@@ -67,6 +67,13 @@ API keys) needs to produce a JSON file matching this shape and pass it to
 - `rs_rw_normalized`: signed, ATR-normalized relative strength/weakness vs.
   an appropriate benchmark or peer (rule 44). Positive favors the ticker
   being relatively strong.
+- `index_confirmation`: `true` if SPY/QQQ's own premarket state (UP/DOWN)
+  agrees with this ticker's Stage 1 state, `false`/omitted otherwise. Set
+  for every ticker except SPY/QQQ themselves. This was previously a
+  hardcoded no-op in the ranking (rule 55 factor 8) -- wire it from real
+  SPY/QQQ premarket data, since it was the single strongest signal on the
+  Sept 21, 2026 session (SPY and QQQ both confirmed risk-on before the
+  open) and it never reached the ranking.
 
 ## Alpha Vantage rate limit
 
