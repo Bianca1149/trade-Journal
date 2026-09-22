@@ -180,27 +180,39 @@ def classify_stage2(snap: dict, stage1: Stage1Result, thresholds: Thresholds = D
     }
 
     continuation_count = sum(continuation_checks.values())
-    # weak_range_position is kept in fade_checks for transparency/diagnostics
-    # but excluded from the vote tally: it is mathematically implied by
-    # meaningful_giveback (retention low -> by definition not near the
-    # extreme), so counting both double-votes the same single fact. This was
-    # a real bug, not a style choice -- confirmed against the Aug 1-Sep 21
-    # 2026 backtest, where every wrong PUT on a still-uptrending momentum
-    # name (AMD, MSTR, COIN, ...) and every wrong CALL on a still-downtrending
-    # small-cap (HOOD, NFLX, HIMS) shared the exact same fade_checks fingerprint:
-    # meaningful_giveback + weak_range_position + lost_vwap_acceptance all
-    # True together, riding one real signal to a 3-vote "majority" that
-    # overrode two genuinely intact continuation signals (trend not
-    # reversing, participation still supportive). Dropping the duplicate vote
-    # requires an actual second independent signal before FADE can win.
+    # weak_range_position is kept in fade_checks for transparency/diagnostics,
+    # but only counts toward the vote tally when it isn't redundant.
+    # meaningful_giveback (retention low) mathematically implies
+    # weak_range_position (not near the extreme) -- so when both are true
+    # they're one fact, not two, and counting both double-votes it. This was
+    # a real bug, confirmed against the Aug 1-Sep 21 2026 backtest: every
+    # wrong PUT on a still-uptrending momentum name (AMD, MSTR, COIN, ...)
+    # and every wrong CALL on a still-downtrending small-cap (HOOD, NFLX,
+    # HIMS) shared the identical fingerprint -- meaningful_giveback,
+    # weak_range_position and lost_vwap_acceptance all true together, one
+    # real signal riding to a false 3-vote "majority" over two genuinely
+    # intact continuation signals.
+    #
+    # But weak_range_position is NOT always redundant: on calmer, lower-ATR
+    # large-caps (AAPL/MSFT/META/AMZN/GOOGL/ORCL) it regularly fires on its
+    # own -- a real, independent "not holding the high" signal -- without
+    # retention ever dropping enough to trip meaningful_giveback. An earlier
+    # version of this fix dropped weak_range_position from the tally
+    # unconditionally, which silently killed that legitimate signal:
+    # ORCL and AMZN's PUT side (previously 100% correct) nearly vanished in
+    # the re-run. So only suppress the vote in the specific case it's
+    # provably duplicate information -- when meaningful_giveback already
+    # fired -- and let it count on its own otherwise.
     fade_vote_keys = ("late_stall_or_reversal", "meaningful_giveback", "lost_vwap_acceptance", "no_confirmation_for_outsized_move")
     fade_count = sum(fade_checks[k] for k in fade_vote_keys)
+    if weak_range_position and not meaningful_giveback:
+        fade_count += 1
     # Rule 27: fade needs at least one real price/structure signal, not just
     # "no confirmation" on its own.
     fade_has_structure_signal = late_stall_or_reversal or meaningful_giveback
 
     reasons = [
-        f"continuation_count={continuation_count}/5, fade_count={fade_count}/{len(fade_vote_keys)}, "
+        f"continuation_count={continuation_count}/5, fade_count={fade_count}/5, "
         f"fade_has_structure_signal={fade_has_structure_signal}"
     ]
 
