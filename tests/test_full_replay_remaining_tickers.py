@@ -104,19 +104,24 @@ def test_slv_correctly_classifies_call_small_real_move():
     assert row.side == "CALL"
 
 
-def test_googl_honestly_reads_fade_premarket_gave_back_its_gain():
-    """GOOGL was a real Sept 21 winner (+1.55% on the day) but its own
-    premarket peaked near 353.9 around 08:10-08:45 ET and gave back almost
-    the entire move to 350.78 by the 9:00 cutoff. Reading that as
-    FADE/PUT is the correct call from the data available before the open
-    -- the same honest-limit pattern already established for NVDA
-    (test_full_replay_additional_tickers.py), not something the pre-9am
-    ranking should be forced to override."""
+def test_googl_honestly_stays_mixed_after_weak_range_position_fix():
+    """GOOGL was a real Sept 21 winner (+1.55% on the day). Its premarket
+    peaked near 353.9 around 08:10-08:45 ET and pulled back to 350.78 by the
+    9:00 cutoff -- a real giveback, but the Aug-Sep backtest proved that
+    giveback + weak_range_position + lost_vwap_acceptance is usually one
+    signal (a pullback within an intact trend), not three, because
+    weak_range_position is implied by the giveback and adds no independent
+    evidence (see the fix note in market_prep/engine.py::classify_stage2).
+    Before that fix this read as a confident, wrong PUT. After it, there's
+    only one real fade vote left (meaningful_giveback) against two live
+    continuation signals, so it correctly backs off to MIXED -- declining to
+    call a side rather than confidently fading a stock that was about to
+    rally, which is the whole point of an honest 9am forecast."""
     snap = _snapshot("GOOGL", GOOGL_PRIOR_CLOSE, GOOGL_ATR_14D, GOOGL_PREMARKET_BARS_RAW)
     row = engine.build_row(snap)
-    assert row.side == "PUT"
-    assert row.stage2.route == "FADE"
+    assert row.side == "MIXED"
     assert row.stage2.fade_checks["meaningful_giveback"] is True
+    assert row.stage2.fade_checks["weak_range_position"] is True
 
 
 def test_orcl_correctly_stays_mixed_choppy_premarket():
